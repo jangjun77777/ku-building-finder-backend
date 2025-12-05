@@ -14,31 +14,24 @@ class Building:
     name_en: str
     code: str
 
-
 def load_buildings(csv_path: str) -> List[Building]:
-    """
-    CSV 파일에서 건물 정보를 읽어서 Building 객체 리스트로 반환.
-    CSV 컬럼 이름은 네가 준 것에 맞춰져 있음:
-    Campus(KR), Campus(EN), Building name(KR),
-    Naver map link, Abbreviations (Nicknames),
-    Building Name(EN), Building Code
-    """
     buildings: List[Building] = []
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             buildings.append(
                 Building(
-                    campus_kr=row.get("Campus(KR)", "").strip(),
-                    campus_en=row.get("Campus(EN)", "").strip(),
-                    name_kr=row.get("Building name(KR)", "").strip(),
+                    campus_kr=row.get("캠퍼스", "").strip(),
+                    campus_en=row.get("Campus", "").strip(),
+                    name_kr=row.get("건물명", "").strip(),
                     map_link=row.get("Naver map link", "").strip().strip('"'),
                     nickname=row.get("Abbreviations (Nicknames)", "").strip(),
-                    name_en=row.get("Building Name(EN)", "").strip(),
-                    code=str(row.get("Building Code", "")).strip(),
+                    name_en=row.get("Building Name", "").strip(),
+                    code=str(row.get("건물코드 (Building Code)", "")).strip(),
                 )
             )
     return buildings
+
 
 
 def normalize(s: str) -> str:
