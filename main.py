@@ -82,5 +82,6 @@ class ChatResponse(BaseModel):
 
 
 @app.post("/chat", response_model=ChatResponse)
+@app.post("/chat/", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     return ChatResponse(reply=ku_chat(req.message))
