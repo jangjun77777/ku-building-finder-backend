@@ -85,3 +85,7 @@ class ChatResponse(BaseModel):
 @app.post("/chat/", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     return ChatResponse(reply=ku_chat(req.message))
+@app.get("/")
+def health():
+    return {"status": "ok"}
+
