@@ -64,11 +64,20 @@ def ku_chat(user_message: str) -> str:
     extract = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "Extract only the building identifier (code or name)."},
+           {"role": "system", "content":  "Extract ONLY the building name, nickname, or building code. " 
+            "Do not include explanations or extra words."},
             {"role": "user", "content": user_message},
         ]
     )
     query = extract.choices[0].message.content.strip()
+    query = (
+    query
+    .replace(".", "")
+    .replace("입니다", "")
+    .replace("이에요", "")
+    .replace("입니다.", "")
+    .strip()
+)
     b = find_building_local(query, BUILDINGS)
 
     lang = detect_language(user_message)
