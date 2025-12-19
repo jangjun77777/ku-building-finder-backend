@@ -69,34 +69,47 @@ def format_multiple_buildings(buildings: list[Building], lang: str) -> str:
         else "These buildings may be relevant:\n\n"
     )
 
-    items = []
-    for b in buildings[:3]:
-        items.append(
-            format_single_building(b, lang)
-        )
-
+    items = [format_single_building(b, lang) for b in buildings[:3]]
     return header + "\n\n".join(items)
 
+
+# =====================
+# 카테고리 검색 (강화)
+# =====================
 
 def category_search(query: str) -> list[Building]:
     q = query.lower()
 
+    # 📚 도서관
     if "도서관" in q or "library" in q:
         return [
             b for b in BUILDINGS
-            if "도서관" in b.name_kr or "library" in b.name_en.lower()
+            if "도서관" in b.name_kr
+            or "library" in b.name_en.lower()
         ]
 
+    # ⚖️ 법학
     if "법학" in q or "law" in q:
         return [
             b for b in BUILDINGS
-            if "법학" in b.name_kr or "law" in b.name_en.lower()
+            if "법학" in b.name_kr
+            or "law" in b.name_en.lower()
         ]
 
+    # 🎓 사범
     if "사범" in q or "education" in q:
         return [
             b for b in BUILDINGS
-            if "사범" in b.name_kr or "education" in b.name_en.lower()
+            if "사범" in b.name_kr
+            or "education" in b.name_en.lower()
+        ]
+
+    # 🏥 간호 (🔥 추가)
+    if "간호" in q or "nursing" in q:
+        return [
+            b for b in BUILDINGS
+            if "간호" in b.name_kr
+            or "nursing" in b.name_en.lower()
         ]
 
     return []
@@ -109,7 +122,7 @@ def category_search(query: str) -> list[Building]:
 def ku_chat(user_message: str) -> str:
     lang = detect_language(user_message)
 
-    # 1️⃣ GPT로 검색 키워드만 추출
+    # 1️⃣ GPT로 핵심 키워드만 추출
     extract = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -117,7 +130,7 @@ def ku_chat(user_message: str) -> str:
                 "role": "system",
                 "content": (
                     "Extract ONLY the building name, nickname, or building category. "
-                    "Do not add explanations."
+                    "No explanations."
                 )
             },
             {"role": "user", "content": user_message},
@@ -127,7 +140,7 @@ def ku_chat(user_message: str) -> str:
     query = extract.choices[0].message.content.strip()
     query = re.sub(r"[\.입니다요]+$", "", query).strip()
 
-    # 2️⃣ 정확한 단일 건물 검색
+    # 2️⃣ 단일 건물 검색
     exact = find_building_local(query, BUILDINGS)
     if exact:
         response = format_single_building(exact, lang)
@@ -138,7 +151,7 @@ def ku_chat(user_message: str) -> str:
 
         return response
 
-    # 3️⃣ 카테고리 검색 (여러 건물)
+    # 3️⃣ 카테고리 검색 (복수 건물)
     candidates = category_search(query)
     if candidates:
         response = format_multiple_buildings(candidates, lang)
