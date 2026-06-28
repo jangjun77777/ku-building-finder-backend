@@ -42,10 +42,11 @@ def load_buildings(csv_path: str) -> List[Building]:
                     name_en=safe_get(row, "Building Name", "Building Name(EN)", "Building Name EN"),
                     code=safe_get(
                         row,
-                        "건물코드 (Building Code)",
-                        "건물코드\n (Building Code)",
-                        "Building Code",
-                        "Code",
+                         "건물코드 (Building Code)",
+                         "건물코드(Building Code)",
+                         "건물코드\n (Building Code)",
+                         "Building Code",
+                         "Code",
                     ),
                 )
             )
