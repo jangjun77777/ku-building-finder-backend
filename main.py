@@ -94,18 +94,79 @@ def category_search(query: str) -> list[Building]:
         "engineering": ["공학", "engineering"],
         "science": ["과학", "science"],
         "business": ["경영", "business"],
+
+        # 학생식당 / 학식
+        "cafeteria": [
+            "cafeteria",
+            "student cafeteria",
+            "dining hall",
+            "dining",
+            "학생식당",
+            "학식",
+            "식당",
+            "밥",
+            "점심",
+            "lunch",
+            "meal",
+        ],
+
+        # 카페 / 커피
+        "cafe": [
+            "cafe",
+            "café",
+            "coffee",
+            "coffee shop",
+            "카페",
+            "커피",
+            "음료",
+            "drink",
+        ],
     }
 
+    matched_category = None
     matched_keywords = None
 
-    for keywords in category_keywords.values():
+    for category, keywords in category_keywords.items():
         if any(keyword in q for keyword in keywords):
+            matched_category = category
             matched_keywords = keywords
             break
 
-    if not matched_keywords:
+    if not matched_category:
         return []
 
+    # cafeteria 전용: 공식 학생식당 2곳
+    if matched_category == "cafeteria":
+        cafeteria_buildings_kr = [
+            "학생회관",
+            "애기능생활관",
+            "애기능 생활관",
+        ]
+
+        cafeteria_buildings_en = [
+            "student union",
+            "aegineung residence hall",
+            "aegineung life hall",
+        ]
+
+        return [
+            b for b in BUILDINGS
+            if b.name_kr in cafeteria_buildings_kr
+            or b.nickname in cafeteria_buildings_kr
+            or b.name_en.lower() in cafeteria_buildings_en
+            or b.nickname.lower() in cafeteria_buildings_en
+        ]
+
+    # cafe 전용: CSV에 cafe/café/coffee/카페/커피가 들어간 건물 검색
+    if matched_category == "cafe":
+        return [
+            b for b in BUILDINGS
+            if any(k in b.name_kr.lower() for k in matched_keywords)
+            or any(k in b.name_en.lower() for k in matched_keywords)
+            or any(k in b.nickname.lower() for k in matched_keywords)
+        ]
+
+    # 일반 카테고리 검색
     return [
         b for b in BUILDINGS
         if any(k in b.name_kr.lower() for k in matched_keywords)
@@ -128,8 +189,11 @@ def ku_chat(user_message: str) -> str:
                 "role": "system",
                 "content": (
                     "Extract ONLY the building name, nickname, or building category. "
-                    "For example: library, law, nursing, education, engineering, science, business. "
-                    "No explanations."
+                    "Do not explain. "
+                    "If the user asks about cafeteria, dining hall, student cafeteria, lunch, meal, "
+                    "학생식당, 학식, 식당, 점심, or 밥, return cafeteria. "
+                    "If the user asks about cafe, coffee, coffee shop, drink, 카페, 커피, or 음료, return cafe. "
+                    "Other examples: library, law, nursing, education, engineering, science, business."
                 ),
             },
             {"role": "user", "content": user_message},
