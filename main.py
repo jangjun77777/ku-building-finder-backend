@@ -183,25 +183,28 @@ def ku_chat(user_message: str) -> str:
     lang = detect_language(user_message)
 
     extract = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-           {
-                "role": "system",
-                "content": (
-                                "You are an information extractor for Korea University campus. "
-                                "Return ONLY one building name or ONE category. "
-                                "Available categories are: building, library, cafe, cafeteria. "
-                                "If the user asks about libraries or 도서관, return 'library'. "
-                                "If the user asks about cafes, coffee, 카페, or 커피, return 'cafe'. "
-                                "If the user asks about cafeterias, dining halls, student cafeterias, 식당, 학생식당, or 학식, return 'cafeteria'. "
-                                "If the user asks about campus buildings or 건물, return 'building'. "
-                                "If the user mentions a specific building or nickname, return ONLY that building name. "
-                                "Do not explain."
-                            )
-        }
-            {"role": "user", "content": user_message},
-        ],
-    )
+    model="gpt-4o-mini",
+    messages=[
+        {
+            "role": "system",
+            "content": (
+                "You are an information extractor for Korea University campus. "
+                "Return ONLY one building name or ONE category. "
+                "Available categories are: building, library, cafe, cafeteria. "
+                "If the user asks about libraries or 도서관, return 'library'. "
+                "If the user asks about cafes, coffee, 카페, or 커피, return 'cafe'. "
+                "If the user asks about cafeterias, dining halls, student cafeterias, 식당, 학생식당, or 학식, return 'cafeteria'. "
+                "If the user asks about campus buildings or 건물, return 'building'. "
+                "If the user mentions a specific building or nickname, return ONLY that building name. "
+                "Do not explain."
+            ),
+        },
+        {
+            "role": "user",
+            "content": user_message,
+        },
+    ],
+)
 
     query = extract.choices[0].message.content.strip()
     query = clean_query(query)
