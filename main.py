@@ -42,9 +42,6 @@ def clean_query(text: str) -> str:
 
 
 def extract_room_info(text: str) -> str | None:
-    """
-    예: B202 → Basement 2nd floor, room 02
-    """
     match = re.search(r"\bB(\d)(\d{2})\b", text.upper())
     if not match:
         return None
@@ -70,13 +67,15 @@ def format_single_building(b: Building, lang: str) -> str:
 
 
 def format_multiple_buildings(buildings: list[Building], lang: str) -> str:
+    count = len(buildings)
+
     header = (
-        "다음 건물들이 해당될 수 있습니다:\n\n"
+        f"다음 건물 {count}개가 해당될 수 있습니다:\n\n"
         if lang == "ko"
-        else "These buildings may be relevant:\n\n"
+        else f"{count} buildings may be relevant:\n\n"
     )
 
-    items = [format_single_building(b, lang) for b in buildings[:3]]
+    items = [format_single_building(b, lang) for b in buildings]
     return header + "\n\n".join(items)
 
 
@@ -92,29 +91,26 @@ def category_search(query: str) -> list[Building]:
         "law": ["법학", "law"],
         "education": ["사범", "education"],
         "nursing": ["간호", "nursing"],
+        "engineering": ["공학", "engineering"],
+        "science": ["과학", "science"],
+        "business": ["경영", "business"],
     }
 
-    matched_category = None
+    matched_keywords = None
 
-    if any(k in q for k in category_keywords["library"]):
-        matched_category = "library"
-    elif any(k in q for k in category_keywords["law"]):
-        matched_category = "law"
-    elif any(k in q for k in category_keywords["education"]):
-        matched_category = "education"
-    elif any(k in q for k in category_keywords["nursing"]):
-        matched_category = "nursing"
+    for keywords in category_keywords.values():
+        if any(keyword in q for keyword in keywords):
+            matched_keywords = keywords
+            break
 
-    if not matched_category:
+    if not matched_keywords:
         return []
-
-    keywords = category_keywords[matched_category]
 
     return [
         b for b in BUILDINGS
-        if any(k in b.name_kr.lower() for k in keywords)
-        or any(k in b.name_en.lower() for k in keywords)
-        or any(k in b.nickname.lower() for k in keywords)
+        if any(k in b.name_kr.lower() for k in matched_keywords)
+        or any(k in b.name_en.lower() for k in matched_keywords)
+        or any(k in b.nickname.lower() for k in matched_keywords)
     ]
 
 
@@ -125,7 +121,6 @@ def category_search(query: str) -> list[Building]:
 def ku_chat(user_message: str) -> str:
     lang = detect_language(user_message)
 
-    # 1️⃣ GPT로 핵심 키워드 추출
     extract = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -133,7 +128,7 @@ def ku_chat(user_message: str) -> str:
                 "role": "system",
                 "content": (
                     "Extract ONLY the building name, nickname, or building category. "
-                    "For example: library, law, nursing, education, central library. "
+                    "For example: library, law, nursing, education, engineering, science, business. "
                     "No explanations."
                 ),
             },
@@ -144,10 +139,9 @@ def ku_chat(user_message: str) -> str:
     query = extract.choices[0].message.content.strip()
     query = clean_query(query)
 
-    # GPT가 뽑은 query와 원문을 같이 사용
     search_text = f"{query} {user_message}"
 
-    # 2️⃣ 카테고리 검색 먼저
+    # 1️⃣ 카테고리 검색 먼저
     candidates = category_search(search_text)
     if candidates:
         response = format_multiple_buildings(candidates, lang)
@@ -158,10 +152,9 @@ def ku_chat(user_message: str) -> str:
 
         return response
 
-    # 3️⃣ 단일 건물 검색
+    # 2️⃣ 단일 건물 검색
     exact = find_building_local(query, BUILDINGS)
 
-    # GPT 추출이 실패했을 때 원문으로 한 번 더 검색
     if not exact:
         exact = find_building_local(user_message, BUILDINGS)
 
@@ -174,7 +167,6 @@ def ku_chat(user_message: str) -> str:
 
         return response
 
-    # 4️⃣ 실패
     return (
         "알 수 없는 건물입니다. 다시 입력해주세요."
         if lang == "ko"
