@@ -34,9 +34,16 @@ def detect_language(text: str) -> str:
     return "ko" if any("\uac00" <= ch <= "\ud7a3" for ch in text) else "en"
 
 
+def clean_query(text: str) -> str:
+    text = text.strip()
+    text = re.sub(r"[.!?]+$", "", text)
+    text = re.sub(r"(입니다|이에요|예요|요)$", "", text)
+    return text.strip()
+
+
 def extract_room_info(text: str) -> str | None:
     """
-    예: B202 → Basement 2nd floor, room 2
+    예: B202 → Basement 2nd floor, room 02
     """
     match = re.search(r"\bB(\d)(\d{2})\b", text.upper())
     if not match:
@@ -74,45 +81,41 @@ def format_multiple_buildings(buildings: list[Building], lang: str) -> str:
 
 
 # =====================
-# 카테고리 검색 (강화)
+# 카테고리 검색
 # =====================
 
 def category_search(query: str) -> list[Building]:
     q = query.lower()
 
-    # 📚 도서관
-    if "도서관" in q or "library" in q:
-        return [
-            b for b in BUILDINGS
-            if "도서관" in b.name_kr
-            or "library" in b.name_en.lower()
-        ]
+    category_keywords = {
+        "library": ["도서관", "library"],
+        "law": ["법학", "law"],
+        "education": ["사범", "education"],
+        "nursing": ["간호", "nursing"],
+    }
 
-    # ⚖️ 법학
-    if "법학" in q or "law" in q:
-        return [
-            b for b in BUILDINGS
-            if "법학" in b.name_kr
-            or "law" in b.name_en.lower()
-        ]
+    matched_category = None
 
-    # 🎓 사범
-    if "사범" in q or "education" in q:
-        return [
-            b for b in BUILDINGS
-            if "사범" in b.name_kr
-            or "education" in b.name_en.lower()
-        ]
+    if any(k in q for k in category_keywords["library"]):
+        matched_category = "library"
+    elif any(k in q for k in category_keywords["law"]):
+        matched_category = "law"
+    elif any(k in q for k in category_keywords["education"]):
+        matched_category = "education"
+    elif any(k in q for k in category_keywords["nursing"]):
+        matched_category = "nursing"
 
-    # 🏥 간호 (🔥 추가)
-    if "간호" in q or "nursing" in q:
-        return [
-            b for b in BUILDINGS
-            if "간호" in b.name_kr
-            or "nursing" in b.name_en.lower()
-        ]
+    if not matched_category:
+        return []
 
-    return []
+    keywords = category_keywords[matched_category]
+
+    return [
+        b for b in BUILDINGS
+        if any(k in b.name_kr.lower() for k in keywords)
+        or any(k in b.name_en.lower() for k in keywords)
+        or any(k in b.nickname.lower() for k in keywords)
+    ]
 
 
 # =====================
@@ -122,7 +125,7 @@ def category_search(query: str) -> list[Building]:
 def ku_chat(user_message: str) -> str:
     lang = detect_language(user_message)
 
-    # 1️⃣ GPT로 핵심 키워드만 추출
+    # 1️⃣ GPT로 핵심 키워드 추출
     extract = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -130,20 +133,24 @@ def ku_chat(user_message: str) -> str:
                 "role": "system",
                 "content": (
                     "Extract ONLY the building name, nickname, or building category. "
+                    "For example: library, law, nursing, education, central library. "
                     "No explanations."
-                )
+                ),
             },
             {"role": "user", "content": user_message},
         ],
     )
 
     query = extract.choices[0].message.content.strip()
-    query = re.sub(r"[\.입니다요]+$", "", query).strip()
+    query = clean_query(query)
 
-    # 2️⃣ 단일 건물 검색
-    exact = find_building_local(query, BUILDINGS)
-    if exact:
-        response = format_single_building(exact, lang)
+    # GPT가 뽑은 query와 원문을 같이 사용
+    search_text = f"{query} {user_message}"
+
+    # 2️⃣ 카테고리 검색 먼저
+    candidates = category_search(search_text)
+    if candidates:
+        response = format_multiple_buildings(candidates, lang)
 
         room_info = extract_room_info(user_message)
         if room_info:
@@ -151,10 +158,15 @@ def ku_chat(user_message: str) -> str:
 
         return response
 
-    # 3️⃣ 카테고리 검색 (복수 건물)
-    candidates = category_search(query)
-    if candidates:
-        response = format_multiple_buildings(candidates, lang)
+    # 3️⃣ 단일 건물 검색
+    exact = find_building_local(query, BUILDINGS)
+
+    # GPT 추출이 실패했을 때 원문으로 한 번 더 검색
+    if not exact:
+        exact = find_building_local(user_message, BUILDINGS)
+
+    if exact:
+        response = format_single_building(exact, lang)
 
         room_info = extract_room_info(user_message)
         if room_info:
