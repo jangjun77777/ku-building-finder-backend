@@ -87,7 +87,7 @@ def category_search(query: str) -> list[Building]:
     q = query.lower()
 
     category_keywords = {
-        "library": ["도서관", "library"],
+        "library": ["도서관", "library","libraries"],
         "law": ["법학", "law"],
         "education": ["사범", "education"],
         "nursing": ["간호", "nursing"],
@@ -185,17 +185,20 @@ def ku_chat(user_message: str) -> str:
     extract = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {
+           {
                 "role": "system",
                 "content": (
-                    "Extract ONLY the building name, nickname, or building category. "
-                    "Do not explain. "
-                    "If the user asks about cafeteria, dining hall, student cafeteria, lunch, meal, "
-                    "학생식당, 학식, 식당, 점심, or 밥, return cafeteria. "
-                    "If the user asks about cafe, coffee, coffee shop, drink, 카페, 커피, or 음료, return cafe. "
-                    "Other examples: library, law, nursing, education, engineering, science, business."
-                ),
-            },
+                                "You are an information extractor for Korea University campus. "
+                                "Return ONLY one building name or ONE category. "
+                                "Available categories are: building, library, cafe, cafeteria. "
+                                "If the user asks about libraries or 도서관, return 'library'. "
+                                "If the user asks about cafes, coffee, 카페, or 커피, return 'cafe'. "
+                                "If the user asks about cafeterias, dining halls, student cafeterias, 식당, 학생식당, or 학식, return 'cafeteria'. "
+                                "If the user asks about campus buildings or 건물, return 'building'. "
+                                "If the user mentions a specific building or nickname, return ONLY that building name. "
+                                "Do not explain."
+                            )
+        }
             {"role": "user", "content": user_message},
         ],
     )
