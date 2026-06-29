@@ -35,6 +35,10 @@ def clean_query(text: str) -> str:
     return text.strip()
 
 
+def normalize_text(text: str) -> str:
+    return str(text or "").strip().lower().replace(" ", "")
+
+
 def extract_room_info(text: str) -> str | None:
     match = re.search(r"\bB(\d)(\d{2})\b", text.upper())
     if not match:
@@ -73,17 +77,25 @@ def format_multiple_buildings(buildings: list[Building], lang: str) -> str:
     return header + "\n\n".join(items)
 
 
+def is_general_category_query(text: str) -> bool:
+    q = text.strip().lower()
+
+    general_queries = {
+        "library", "libraries", "도서관",
+        "cafe", "cafes", "café", "coffee", "카페", "커피",
+        "cafeteria", "cafeterias", "dining hall", "dining halls",
+        "student cafeteria", "student cafeterias", "식당", "학생식당", "학식",
+        "building", "buildings", "건물",
+    }
+
+    return q in general_queries
+
+
 def category_search(query: str) -> list[Building]:
     q = query.lower()
 
     category_keywords = {
         "library": ["도서관", "library", "libraries"],
-        "law": ["법학", "law"],
-        "education": ["사범", "education"],
-        "nursing": ["간호", "nursing"],
-        "engineering": ["공학", "engineering"],
-        "science": ["과학", "science"],
-        "business": ["경영", "business"],
         "cafeteria": [
             "cafeteria",
             "student cafeteria",
@@ -107,6 +119,12 @@ def category_search(query: str) -> list[Building]:
             "음료",
             "drink",
         ],
+        "law": ["법학", "law"],
+        "education": ["사범", "education"],
+        "nursing": ["간호", "nursing"],
+        "engineering": ["공학", "engineering"],
+        "science": ["과학", "science"],
+        "business": ["경영", "business"],
     }
 
     matched_category = None
@@ -121,25 +139,64 @@ def category_search(query: str) -> list[Building]:
     if not matched_category:
         return []
 
-    if matched_category == "cafeteria":
-        cafeteria_buildings_kr = [
-            "학생회관",
-            "애기능생활관",
-            "애기능 생활관",
-        ]
+    if matched_category == "library":
+        library_names = {
+            "대학원",
+            "graduate school",
+            "대학원도서관",
 
-        cafeteria_buildings_en = [
-            "student union",
-            "aegineung residence hall",
-            "aegineung life hall",
-        ]
+            "해송법학도서관",
+            "haesong law library",
+
+            "과학도서관",
+            "science & engineering library",
+            "science library",
+            "engineering library",
+            "과도",
+
+            "백주년기념삼성관/박물관",
+            "centennial samsung hall / museum/library",
+            "centennial samsung hall",
+            "museum/library",
+            "백기",
+
+            "의학도서관",
+            "medical library",
+            "의도",
+
+            "중앙도서관",
+            "central library",
+            "중도",
+        }
 
         return [
             b for b in BUILDINGS
-            if b.name_kr in cafeteria_buildings_kr
-            or b.nickname in cafeteria_buildings_kr
-            or b.name_en.lower() in cafeteria_buildings_en
-            or b.nickname.lower() in cafeteria_buildings_en
+            if normalize_text(b.name_kr) in {normalize_text(x) for x in library_names}
+            or normalize_text(b.name_en) in {normalize_text(x) for x in library_names}
+            or any(
+                normalize_text(nickname) in {normalize_text(x) for x in library_names}
+                for nickname in str(b.nickname or "").split(",")
+            )
+        ]
+
+    if matched_category == "cafeteria":
+        cafeteria_names = {
+            "학생회관",
+            "student union",
+            "애기능생활관",
+            "애기능 생활관",
+            "aegineung residence hall",
+            "aegineung life hall",
+        }
+
+        return [
+            b for b in BUILDINGS
+            if normalize_text(b.name_kr) in {normalize_text(x) for x in cafeteria_names}
+            or normalize_text(b.name_en) in {normalize_text(x) for x in cafeteria_names}
+            or any(
+                normalize_text(nickname) in {normalize_text(x) for x in cafeteria_names}
+                for nickname in str(b.nickname or "").split(",")
+            )
         ]
 
     if matched_category == "cafe":
@@ -161,7 +218,18 @@ def category_search(query: str) -> list[Building]:
 def ku_chat(user_message: str) -> str:
     lang = detect_language(user_message)
 
-    # 1️⃣ 원문으로 특정 건물 먼저 검색
+    if is_general_category_query(user_message):
+        candidates = category_search(user_message)
+
+        if candidates:
+            response = format_multiple_buildings(candidates, lang)
+
+            room_info = extract_room_info(user_message)
+            if room_info:
+                response += "\n\n" + room_info
+
+            return response
+
     exact = find_building_local(user_message, BUILDINGS)
 
     if exact:
@@ -173,7 +241,6 @@ def ku_chat(user_message: str) -> str:
 
         return response
 
-    # 2️⃣ 원문에서 못 찾았을 때만 GPT로 category/building 추출
     extract = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -183,14 +250,15 @@ def ku_chat(user_message: str) -> str:
                     "You are an information extractor for Korea University campus. "
                     "Return ONLY one building name or ONE category. "
                     "Available categories are: building, library, cafe, cafeteria. "
-                    "If the user asks about libraries or 도서관 in general, return 'library'. "
-                    "If the user asks about cafes, coffee, 카페, or 커피 in general, return 'cafe'. "
-                    "If the user asks about cafeterias, dining halls, student cafeterias, 식당, 학생식당, or 학식 in general, return 'cafeteria'. "
-                    "If the user asks about campus buildings or 건물 in general, return 'building'. "
+                    "If the user asks only about libraries or 도서관 in general, return 'library'. "
+                    "If the user asks only about cafes, coffee, 카페, or 커피 in general, return 'cafe'. "
+                    "If the user asks only about cafeterias, dining halls, student cafeterias, 식당, 학생식당, or 학식 in general, return 'cafeteria'. "
                     "If the user mentions a specific building, library, cafe, cafeteria, or nickname, return ONLY that specific name. "
                     "Examples: "
-                    "science library -> Science Library. "
+                    "science library -> Science & Engineering Library. "
                     "central library -> Central Library. "
+                    "medical library -> Medical Library. "
+                    "law library -> Haesong Law Library. "
                     "library -> library. "
                     "libraries -> library. "
                     "Do not explain."
@@ -203,10 +271,20 @@ def ku_chat(user_message: str) -> str:
         ],
     )
 
-    query = extract.choices[0].message.content.strip()
-    query = clean_query(query)
+    query = clean_query(extract.choices[0].message.content.strip())
 
-    # 3️⃣ GPT가 뽑은 이름으로 다시 특정 건물 검색
+    if is_general_category_query(query):
+        candidates = category_search(query)
+
+        if candidates:
+            response = format_multiple_buildings(candidates, lang)
+
+            room_info = extract_room_info(user_message)
+            if room_info:
+                response += "\n\n" + room_info
+
+            return response
+
     exact = find_building_local(query, BUILDINGS)
 
     if exact:
@@ -218,45 +296,7 @@ def ku_chat(user_message: str) -> str:
 
         return response
 
-    # 4️⃣ 그래도 안 잡힐 때만 카테고리 검색
-    search_text = f"{query} {user_message}"
-    candidates = category_search(search_text)
-
-    if candidates:
-        response = format_multiple_buildings(candidates, lang)
-
-        room_info = extract_room_info(user_message)
-        if room_info:
-            response += "\n\n" + room_info
-
-        return response
-
-    return (
-        "알 수 없는 건물입니다. 다시 입력해주세요."
-        if lang == "ko"
-        else "Could not recognize that building. Please try again."
-    )
-
-    query = extract.choices[0].message.content.strip()
-    query = clean_query(query)
-
-    exact = find_building_local(query, BUILDINGS)
-
-    if not exact:
-        exact = find_building_local(user_message, BUILDINGS)
-
-    if exact:
-        response = format_single_building(exact, lang)
-
-        room_info = extract_room_info(user_message)
-        if room_info:
-            response += "\n\n" + room_info
-
-        return response
-
-    search_text = f"{query} {user_message}"
-
-    candidates = category_search(search_text)
+    candidates = category_search(f"{query} {user_message}")
 
     if candidates:
         response = format_multiple_buildings(candidates, lang)
