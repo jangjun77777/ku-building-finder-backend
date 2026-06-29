@@ -92,15 +92,18 @@ def is_general_category_query(text: str) -> bool:
 
 
 def category_search(query: str) -> list[Building]:
-    q = query.lower()
+    q = query.lower().strip()
 
     category_keywords = {
         "library": ["도서관", "library", "libraries"],
+
         "cafeteria": [
             "cafeteria",
+            "cafeterias",
             "student cafeteria",
+            "student cafeterias",
             "dining hall",
-            "dining",
+            "dining halls",
             "학생식당",
             "학식",
             "식당",
@@ -109,8 +112,10 @@ def category_search(query: str) -> list[Building]:
             "lunch",
             "meal",
         ],
+
         "cafe": [
             "cafe",
+            "cafes",
             "café",
             "coffee",
             "coffee shop",
@@ -119,6 +124,7 @@ def category_search(query: str) -> list[Building]:
             "음료",
             "drink",
         ],
+
         "law": ["법학", "law"],
         "education": ["사범", "education"],
         "nursing": ["간호", "nursing"],
@@ -130,43 +136,45 @@ def category_search(query: str) -> list[Building]:
     matched_category = None
     matched_keywords = None
 
-    for category, keywords in category_keywords.items():
-        if any(keyword in q for keyword in keywords):
-            matched_category = category
-            matched_keywords = keywords
-            break
+    # ---------- cafe / cafeteria 구분 ----------
+    if q in {
+        "cafe", "cafes", "café",
+        "coffee", "coffee shop",
+        "카페", "커피"
+    }:
+        matched_category = "cafe"
+        matched_keywords = category_keywords["cafe"]
+
+    elif q in {
+        "cafeteria", "cafeterias",
+        "student cafeteria", "student cafeterias",
+        "dining hall", "dining halls",
+        "학생식당", "학식", "식당"
+    }:
+        matched_category = "cafeteria"
+        matched_keywords = category_keywords["cafeteria"]
+
+    else:
+        for category, keywords in category_keywords.items():
+            if any(keyword in q for keyword in keywords):
+                matched_category = category
+                matched_keywords = keywords
+                break
 
     if not matched_category:
         return []
 
+    # ---------- Library ----------
     if matched_category == "library":
         library_names = {
-            "대학원",
-            "graduate school",
-            "대학원도서관",
-
-            "해송법학도서관",
-            "haesong law library",
-
-            "과학도서관",
-            "science & engineering library",
-            "science library",
-            "engineering library",
-            "과도",
-
+            "대학원", "Graduate School",
+            "중앙도서관", "Central Library",
+            "과학도서관", "Science Library",
+            "Science & Engineering Library",
+            "의학도서관", "Medical Library",
+            "해송법학도서관", "Haesong Law Library",
             "백주년기념삼성관/박물관",
-            "centennial samsung hall / museum/library",
-            "centennial samsung hall",
-            "museum/library",
-            "백기",
-
-            "의학도서관",
-            "medical library",
-            "의도",
-
-            "중앙도서관",
-            "central library",
-            "중도",
+            "Centennial Samsung Hall / Museum/Library",
         }
 
         return [
@@ -174,19 +182,20 @@ def category_search(query: str) -> list[Building]:
             if normalize_text(b.name_kr) in {normalize_text(x) for x in library_names}
             or normalize_text(b.name_en) in {normalize_text(x) for x in library_names}
             or any(
-                normalize_text(nickname) in {normalize_text(x) for x in library_names}
-                for nickname in str(b.nickname or "").split(",")
+                normalize_text(n) in {normalize_text(x) for x in library_names}
+                for n in str(b.nickname or "").split(",")
             )
         ]
 
+    # ---------- Cafeteria ----------
     if matched_category == "cafeteria":
         cafeteria_names = {
             "학생회관",
-            "student union",
+            "Student Union",
             "애기능생활관",
             "애기능 생활관",
-            "aegineung residence hall",
-            "aegineung life hall",
+            "Aegineung Residence Hall",
+            "Aegineung Life Hall",
         }
 
         return [
@@ -194,26 +203,34 @@ def category_search(query: str) -> list[Building]:
             if normalize_text(b.name_kr) in {normalize_text(x) for x in cafeteria_names}
             or normalize_text(b.name_en) in {normalize_text(x) for x in cafeteria_names}
             or any(
-                normalize_text(nickname) in {normalize_text(x) for x in cafeteria_names}
-                for nickname in str(b.nickname or "").split(",")
+                normalize_text(n) in {normalize_text(x) for x in cafeteria_names}
+                for n in str(b.nickname or "").split(",")
             )
         ]
 
+    # ---------- Cafe ----------
     if matched_category == "cafe":
         return [
             b for b in BUILDINGS
-            if any(k in b.name_kr.lower() for k in matched_keywords)
-            or any(k in b.name_en.lower() for k in matched_keywords)
-            or any(k in b.nickname.lower() for k in matched_keywords)
+            if (
+                any(k in b.name_kr.lower() for k in matched_keywords)
+                or any(k in b.name_en.lower() for k in matched_keywords)
+                or any(k in b.nickname.lower() for k in matched_keywords)
+            )
+            # cafeteria는 제외
+            and "cafeteria" not in b.name_en.lower()
+            and "student cafeteria" not in b.name_en.lower()
+            and "학생식당" not in b.name_kr
+            and "식당" not in b.name_kr
         ]
 
+    # ---------- 기타 ----------
     return [
         b for b in BUILDINGS
         if any(k in b.name_kr.lower() for k in matched_keywords)
         or any(k in b.name_en.lower() for k in matched_keywords)
         or any(k in b.nickname.lower() for k in matched_keywords)
     ]
-
 
 def ku_chat(user_message: str) -> str:
     lang = detect_language(user_message)
