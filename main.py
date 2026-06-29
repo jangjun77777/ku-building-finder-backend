@@ -7,9 +7,6 @@ import re
 
 from buildings import load_buildings, find_building_local, Building
 
-# =====================
-# 기본 설정
-# =====================
 load_dotenv()
 client = OpenAI()
 
@@ -26,9 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =====================
-# 유틸 함수
-# =====================
 
 def detect_language(text: str) -> str:
     return "ko" if any("\uac00" <= ch <= "\ud7a3" for ch in text) else "en"
@@ -58,12 +52,12 @@ def format_single_building(b: Building, lang: str) -> str:
             f"건물명(영어): {b.name_en}\n"
             f"네이버 지도 링크: {b.map_link}"
         )
-    else:
-        return (
-            f"Building name (Korean): {b.name_kr}\n"
-            f"Building name (English): {b.name_en}\n"
-            f"Naver Map link: {b.map_link}"
-        )
+
+    return (
+        f"Building name (Korean): {b.name_kr}\n"
+        f"Building name (English): {b.name_en}\n"
+        f"Naver Map link: {b.map_link}"
+    )
 
 
 def format_multiple_buildings(buildings: list[Building], lang: str) -> str:
@@ -79,23 +73,17 @@ def format_multiple_buildings(buildings: list[Building], lang: str) -> str:
     return header + "\n\n".join(items)
 
 
-# =====================
-# 카테고리 검색
-# =====================
-
 def category_search(query: str) -> list[Building]:
     q = query.lower()
 
     category_keywords = {
-        "library": ["도서관", "library","libraries"],
+        "library": ["도서관", "library", "libraries"],
         "law": ["법학", "law"],
         "education": ["사범", "education"],
         "nursing": ["간호", "nursing"],
         "engineering": ["공학", "engineering"],
         "science": ["과학", "science"],
         "business": ["경영", "business"],
-
-        # 학생식당 / 학식
         "cafeteria": [
             "cafeteria",
             "student cafeteria",
@@ -109,8 +97,6 @@ def category_search(query: str) -> list[Building]:
             "lunch",
             "meal",
         ],
-
-        # 카페 / 커피
         "cafe": [
             "cafe",
             "café",
@@ -135,7 +121,6 @@ def category_search(query: str) -> list[Building]:
     if not matched_category:
         return []
 
-    # cafeteria 전용: 공식 학생식당 2곳
     if matched_category == "cafeteria":
         cafeteria_buildings_kr = [
             "학생회관",
@@ -157,7 +142,6 @@ def category_search(query: str) -> list[Building]:
             or b.nickname.lower() in cafeteria_buildings_en
         ]
 
-    # cafe 전용: CSV에 cafe/café/coffee/카페/커피가 들어간 건물 검색
     if matched_category == "cafe":
         return [
             b for b in BUILDINGS
@@ -166,7 +150,6 @@ def category_search(query: str) -> list[Building]:
             or any(k in b.nickname.lower() for k in matched_keywords)
         ]
 
-    # 일반 카테고리 검색
     return [
         b for b in BUILDINGS
         if any(k in b.name_kr.lower() for k in matched_keywords)
@@ -175,54 +158,36 @@ def category_search(query: str) -> list[Building]:
     ]
 
 
-# =====================
-# 핵심 로직
-# =====================
-
 def ku_chat(user_message: str) -> str:
     lang = detect_language(user_message)
 
     extract = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[
-        {
-            "role": "system",
-            "content": (
-                "You are an information extractor for Korea University campus. "
-                "Return ONLY one building name or ONE category. "
-                "Available categories are: building, library, cafe, cafeteria. "
-                "If the user asks about libraries or 도서관, return 'library'. "
-                "If the user asks about cafes, coffee, 카페, or 커피, return 'cafe'. "
-                "If the user asks about cafeterias, dining halls, student cafeterias, 식당, 학생식당, or 학식, return 'cafeteria'. "
-                "If the user asks about campus buildings or 건물, return 'building'. "
-                "If the user mentions a specific building or nickname, return ONLY that building name. "
-                "Do not explain."
-            ),
-        },
-        {
-            "role": "user",
-            "content": user_message,
-        },
-    ],
-)
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an information extractor for Korea University campus. "
+                    "Return ONLY one building name or ONE category. "
+                    "Available categories are: building, library, cafe, cafeteria. "
+                    "If the user asks about libraries or 도서관 in general, return 'library'. "
+                    "If the user asks about cafes, coffee, 카페, or 커피 in general, return 'cafe'. "
+                    "If the user asks about cafeterias, dining halls, student cafeterias, 식당, 학생식당, or 학식 in general, return 'cafeteria'. "
+                    "If the user asks about campus buildings or 건물 in general, return 'building'. "
+                    "If the user mentions a specific building, library, cafe, cafeteria, or nickname, return ONLY that specific name. "
+                    "Do not explain."
+                ),
+            },
+            {
+                "role": "user",
+                "content": user_message,
+            },
+        ],
+    )
 
     query = extract.choices[0].message.content.strip()
     query = clean_query(query)
 
-    search_text = f"{query} {user_message}"
-
-    # 1️⃣ 카테고리 검색 먼저
-    candidates = category_search(search_text)
-    if candidates:
-        response = format_multiple_buildings(candidates, lang)
-
-        room_info = extract_room_info(user_message)
-        if room_info:
-            response += "\n\n" + room_info
-
-        return response
-
-    # 2️⃣ 단일 건물 검색
     exact = find_building_local(query, BUILDINGS)
 
     if not exact:
@@ -237,16 +202,25 @@ def ku_chat(user_message: str) -> str:
 
         return response
 
+    search_text = f"{query} {user_message}"
+
+    candidates = category_search(search_text)
+
+    if candidates:
+        response = format_multiple_buildings(candidates, lang)
+
+        room_info = extract_room_info(user_message)
+        if room_info:
+            response += "\n\n" + room_info
+
+        return response
+
     return (
         "알 수 없는 건물입니다. 다시 입력해주세요."
         if lang == "ko"
         else "Could not recognize that building. Please try again."
     )
 
-
-# =====================
-# API
-# =====================
 
 class ChatRequest(BaseModel):
     message: str
