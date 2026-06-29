@@ -161,6 +161,19 @@ def category_search(query: str) -> list[Building]:
 def ku_chat(user_message: str) -> str:
     lang = detect_language(user_message)
 
+    # 1️⃣ 원문으로 특정 건물 먼저 검색
+    exact = find_building_local(user_message, BUILDINGS)
+
+    if exact:
+        response = format_single_building(exact, lang)
+
+        room_info = extract_room_info(user_message)
+        if room_info:
+            response += "\n\n" + room_info
+
+        return response
+
+    # 2️⃣ 원문에서 못 찾았을 때만 GPT로 category/building 추출
     extract = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -175,6 +188,11 @@ def ku_chat(user_message: str) -> str:
                     "If the user asks about cafeterias, dining halls, student cafeterias, 식당, 학생식당, or 학식 in general, return 'cafeteria'. "
                     "If the user asks about campus buildings or 건물 in general, return 'building'. "
                     "If the user mentions a specific building, library, cafe, cafeteria, or nickname, return ONLY that specific name. "
+                    "Examples: "
+                    "science library -> Science Library. "
+                    "central library -> Central Library. "
+                    "library -> library. "
+                    "libraries -> library. "
                     "Do not explain."
                 ),
             },
@@ -183,6 +201,40 @@ def ku_chat(user_message: str) -> str:
                 "content": user_message,
             },
         ],
+    )
+
+    query = extract.choices[0].message.content.strip()
+    query = clean_query(query)
+
+    # 3️⃣ GPT가 뽑은 이름으로 다시 특정 건물 검색
+    exact = find_building_local(query, BUILDINGS)
+
+    if exact:
+        response = format_single_building(exact, lang)
+
+        room_info = extract_room_info(user_message)
+        if room_info:
+            response += "\n\n" + room_info
+
+        return response
+
+    # 4️⃣ 그래도 안 잡힐 때만 카테고리 검색
+    search_text = f"{query} {user_message}"
+    candidates = category_search(search_text)
+
+    if candidates:
+        response = format_multiple_buildings(candidates, lang)
+
+        room_info = extract_room_info(user_message)
+        if room_info:
+            response += "\n\n" + room_info
+
+        return response
+
+    return (
+        "알 수 없는 건물입니다. 다시 입력해주세요."
+        if lang == "ko"
+        else "Could not recognize that building. Please try again."
     )
 
     query = extract.choices[0].message.content.strip()
