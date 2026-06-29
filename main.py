@@ -13,14 +13,6 @@ client = OpenAI()
 CSV_PATH = "Building_information_data.csv"
 BUILDINGS = load_buildings(CSV_PATH)
 
-WATER_PURIFIER_LOCATIONS = {
-    "우당교양관": {"ko": "2층 로비", "en": "2F lobby"},
-    "미디어관": {"ko": "1층 로비", "en": "1F lobby"},
-    "정경관": {"ko": "1층, 2층, 5층", "en": "1F, 2F, and 5F"},
-    "학생회관": {"ko": "1층, 2층(학생식당 내부)", "en": "1F and inside the 2F cafeteria"},
-    "SK미래관": {"ko": "2층, 4층", "en": "2F and 4F"},
-}
-
 app = FastAPI(title="KU Campus Building Finder API")
 
 app.add_middleware(
@@ -229,7 +221,7 @@ def category_search(query: str) -> list[Building]:
             )
         ]
 
-          if matched_category == "cafeteria":
+    if matched_category == "cafeteria":
         cafeteria_names = {
             "학생회관",
             "Student Union",
