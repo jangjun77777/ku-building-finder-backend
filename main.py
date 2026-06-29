@@ -13,6 +13,14 @@ client = OpenAI()
 CSV_PATH = "Building_information_data.csv"
 BUILDINGS = load_buildings(CSV_PATH)
 
+WATER_PURIFIER_LOCATIONS = {
+    "우당교양관": {"ko": "2층 로비", "en": "2F lobby"},
+    "미디어관": {"ko": "1층 로비", "en": "1F lobby"},
+    "정경관": {"ko": "1층, 2층, 5층", "en": "1F, 2F, and 5F"},
+    "학생회관": {"ko": "1층, 2층(학생식당 내부)", "en": "1F and inside the 2F cafeteria"},
+    "SK미래관": {"ko": "2층, 4층", "en": "2F and 4F"},
+}
+
 app = FastAPI(title="KU Campus Building Finder API")
 
 app.add_middleware(
@@ -37,6 +45,43 @@ def clean_query(text: str) -> str:
 
 def normalize_text(text: str) -> str:
     return str(text or "").strip().lower().replace(" ", "")
+
+
+def is_water_query(text: str) -> bool:
+    q = text.lower()
+
+    keywords = [
+        "정수기",
+        "water purifier",
+        "water dispenser",
+        "drinking water",
+        "water station",
+    ]
+
+    return any(k in q for k in keywords)
+
+
+def format_water_purifier_locations(lang: str) -> str:
+    lines = []
+
+    title = (
+        "정수기 위치는 다음과 같습니다:\n"
+        if lang == "ko"
+        else "Water purifier locations:\n"
+    )
+
+    for building_name, location in WATER_PURIFIER_LOCATIONS.items():
+        building = find_building_local(building_name, BUILDINGS)
+
+        if not building:
+            continue
+
+        if lang == "ko":
+            lines.append(f"• {building.name_kr}: {location['ko']}")
+        else:
+            lines.append(f"• {building.name_en}: {location['en']}")
+
+    return title + "\n".join(lines)
 
 
 def extract_room_info(text: str) -> str | None:
@@ -96,7 +141,6 @@ def category_search(query: str) -> list[Building]:
 
     category_keywords = {
         "library": ["도서관", "library", "libraries"],
-
         "cafeteria": [
             "cafeteria",
             "cafeterias",
@@ -112,7 +156,6 @@ def category_search(query: str) -> list[Building]:
             "lunch",
             "meal",
         ],
-
         "cafe": [
             "cafe",
             "cafes",
@@ -124,7 +167,6 @@ def category_search(query: str) -> list[Building]:
             "음료",
             "drink",
         ],
-
         "law": ["법학", "law"],
         "education": ["사범", "education"],
         "nursing": ["간호", "nursing"],
@@ -136,7 +178,6 @@ def category_search(query: str) -> list[Building]:
     matched_category = None
     matched_keywords = None
 
-    # ---------- cafe / cafeteria 구분 ----------
     if q in {
         "cafe", "cafes", "café",
         "coffee", "coffee shop",
@@ -164,7 +205,6 @@ def category_search(query: str) -> list[Building]:
     if not matched_category:
         return []
 
-    # ---------- Library ----------
     if matched_category == "library":
         library_names = {
             "대학원", "Graduate School",
@@ -177,38 +217,42 @@ def category_search(query: str) -> list[Building]:
             "Centennial Samsung Hall / Museum/Library",
         }
 
+        normalized_library_names = {normalize_text(x) for x in library_names}
+
         return [
             b for b in BUILDINGS
-            if normalize_text(b.name_kr) in {normalize_text(x) for x in library_names}
-            or normalize_text(b.name_en) in {normalize_text(x) for x in library_names}
+            if normalize_text(b.name_kr) in normalized_library_names
+            or normalize_text(b.name_en) in normalized_library_names
             or any(
-                normalize_text(n) in {normalize_text(x) for x in library_names}
+                normalize_text(n) in normalized_library_names
                 for n in str(b.nickname or "").split(",")
             )
         ]
 
-    # ---------- Cafeteria ----------
     if matched_category == "cafeteria":
-        cafeteria_names = {
+       cafeteria_names = {
             "학생회관",
             "Student Union",
             "애기능생활관",
             "애기능 생활관",
             "Aegineung Residence Hall",
             "Aegineung Life Hall",
+            "Tiger Rice Bowl Cafeteria",
+            "Tiger Rice Bowl",
         }
+
+        normalized_cafeteria_names = {normalize_text(x) for x in cafeteria_names}
 
         return [
             b for b in BUILDINGS
-            if normalize_text(b.name_kr) in {normalize_text(x) for x in cafeteria_names}
-            or normalize_text(b.name_en) in {normalize_text(x) for x in cafeteria_names}
+            if normalize_text(b.name_kr) in normalized_cafeteria_names
+            or normalize_text(b.name_en) in normalized_cafeteria_names
             or any(
-                normalize_text(n) in {normalize_text(x) for x in cafeteria_names}
+                normalize_text(n) in normalized_cafeteria_names
                 for n in str(b.nickname or "").split(",")
             )
         ]
 
-    # ---------- Cafe ----------
     if matched_category == "cafe":
         return [
             b for b in BUILDINGS
@@ -217,14 +261,12 @@ def category_search(query: str) -> list[Building]:
                 or any(k in b.name_en.lower() for k in matched_keywords)
                 or any(k in b.nickname.lower() for k in matched_keywords)
             )
-            # cafeteria는 제외
             and "cafeteria" not in b.name_en.lower()
             and "student cafeteria" not in b.name_en.lower()
             and "학생식당" not in b.name_kr
             and "식당" not in b.name_kr
         ]
 
-    # ---------- 기타 ----------
     return [
         b for b in BUILDINGS
         if any(k in b.name_kr.lower() for k in matched_keywords)
@@ -232,8 +274,12 @@ def category_search(query: str) -> list[Building]:
         or any(k in b.nickname.lower() for k in matched_keywords)
     ]
 
+
 def ku_chat(user_message: str) -> str:
     lang = detect_language(user_message)
+
+    if is_water_query(user_message):
+        return format_water_purifier_locations(lang)
 
     if is_general_category_query(user_message):
         candidates = category_search(user_message)
@@ -278,6 +324,10 @@ def ku_chat(user_message: str) -> str:
                     "law library -> Haesong Law Library. "
                     "library -> library. "
                     "libraries -> library. "
+                    "cafe -> cafe. "
+                    "coffee -> cafe. "
+                    "cafeteria -> cafeteria. "
+                    "student cafeteria -> cafeteria. "
                     "Do not explain."
                 ),
             },
