@@ -229,7 +229,7 @@ def category_search(query: str) -> list[Building]:
             )
         ]
 
-        if matched_category == "cafeteria":
+          if matched_category == "cafeteria":
         cafeteria_names = {
             "학생회관",
             "Student Union",
