@@ -48,10 +48,12 @@ def normalize_text(text: str) -> str:
 
 
 def is_water_query(text: str) -> bool:
-    q = text.lower()
+    q = text.lower().strip()
 
     keywords = [
         "정수기",
+        "물",
+        "water",
         "water purifier",
         "water dispenser",
         "drinking water",
@@ -62,26 +64,24 @@ def is_water_query(text: str) -> bool:
 
 
 def format_water_purifier_locations(lang: str) -> str:
-    lines = []
+    if lang == "ko":
+        return (
+            "정수기 위치는 다음과 같습니다:\n\n"
+            "• 우당교양관: 2층 로비\n"
+            "• 미디어관: 1층 로비\n"
+            "• 정경관: 1층, 2층, 5층\n"
+            "• 학생회관: 1층, 2층(학생식당 내부)\n"
+            "• SK미래관: 2층, 4층"
+        )
 
-    title = (
-        "정수기 위치는 다음과 같습니다:\n"
-        if lang == "ko"
-        else "Water purifier locations:\n"
+    return (
+        "Water purifier locations:\n\n"
+        "• Woodang General Education Hall: 2F lobby\n"
+        "• Media Hall: 1F lobby\n"
+        "• Political Science and Economics Building: 1F, 2F, and 5F\n"
+        "• Student Union: 1F and inside the 2F cafeteria\n"
+        "• SK Future Hall: 2F and 4F"
     )
-
-    for building_name, location in WATER_PURIFIER_LOCATIONS.items():
-        building = find_building_local(building_name, BUILDINGS)
-
-        if not building:
-            continue
-
-        if lang == "ko":
-            lines.append(f"• {building.name_kr}: {location['ko']}")
-        else:
-            lines.append(f"• {building.name_en}: {location['en']}")
-
-    return title + "\n".join(lines)
 
 
 def extract_room_info(text: str) -> str | None:
